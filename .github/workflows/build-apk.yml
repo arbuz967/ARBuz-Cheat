@@ -1,3 +1,4 @@
+
 name: Build ARBUZ APK
 
 on:
@@ -10,51 +11,32 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Extract project
         run: |
           ZIP=$(find . -maxdepth 1 -name '*.zip' | head -n 1)
-          test -n "$ZIP"
+          if [ -z "$ZIP" ]; then
+            echo "ZIP archive not found"
+            exit 1
+          fi
           mkdir source
           unzip -q "$ZIP" -d source
           test -f source/arbuz_ci/settings.gradle
 
-      - name: Fix Java compilation
+      - name: Fix Java login button
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("source/arbuz_ci/app/src/main/java/com/arbuz/cheat/MainActivity.java")
-          s = p.read_text()
-          old = '''        Button login = button("ВОЙТИ", () -> {
-            String key = keyInput.getText().toString().trim();
-            if (!key.matches("ArbuzShop[0-9]{10}")) {
-                status.setText("Неверный формат. Ожидается ArbuzShop и 10 цифр.");
-                return;
-            }
-            status.setText("Проверка ключа…");
-            login.setEnabled(false);
-            verifyKey(key, status, login);
-        });
-        root.addView(login);'''
-          new = '''        final Button[] loginRef = new Button[1];
-        loginRef[0] = button("ВОЙТИ", () -> {
-            String key = keyInput.getText().toString().trim();
-            if (!key.matches("ArbuzShop[0-9]{10}")) {
-                status.setText("Неверный формат. Ожидается ArbuzShop и 10 цифр.");
-                return;
-            }
-            status.setText("Проверка ключа…");
-            loginRef[0].setEnabled(false);
-            verifyKey(key, status, loginRef[0]);
-        });
-        root.addView(loginRef[0]);'''
-          if old not in s:
-              raise SystemExit("Expected Java code block not found")
-          p.write_text(s.replace(old, new, 1))
-          PY
+          FILE="source/arbuz_ci/app/src/main/java/com/arbuz/cheat/MainActivity.java"
+
+          sed -i 's/Button login = button(/final Button[] loginRef = new Button[1]; loginRef[0] = button(/' "$FILE"
+          sed -i 's/login.setEnabled(false);/loginRef[0].setEnabled(false);/' "$FILE"
+          sed -i 's/verifyKey(key, status, login);/verifyKey(key, status, loginRef[0]);/' "$FILE"
+          sed -i 's/root.addView(login);/root.addView(loginRef[0]);/' "$FILE"
+
+          grep -n 'loginRef' "$FILE"
 
       - name: Set up Java
         uses: actions/setup-java@v4
